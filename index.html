@@ -4820,11 +4820,18 @@ OUTPUT FORMAT — USE EXACT TAGS BELOW:
 
                     // Models confirmed working with Gemini API
                     const MODELS_TO_TRY = [
+                        // API-key-compatible models first. The gemini-3.x
+                        // names route to an endpoint that rejects API keys
+                        // outright ("API keys are not supported by this API"),
+                        // so leading with them meant never reaching a model
+                        // that works.
+                        'gemini-2.5-flash',
+                        'gemini-flash-latest',
+                        'gemini-2.5-flash-lite',
+                        'gemini-2.5-pro',
                         'gemini-3.5-flash',
                         'gemini-3.1-flash-lite',
-                        'gemini-2.5-flash',
-                        'gemini-3.6-flash',
-                        'gemini-flash-latest'
+                        'gemini-3.6-flash'
                     ];
 
                     let isRateLimited = false;
@@ -4873,9 +4880,29 @@ OUTPUT FORMAT — USE EXACT TAGS BELOW:
                                 }
 
                                 // Check for invalid/revoked/unauthenticated API key — stop looping models for this key immediately!
-                                if (response.status === 401 || response.status === 403 || lastError.toLowerCase().includes('key') || lastError.toLowerCase().includes('unauthenticated') || lastError.toLowerCase().includes('leaked')) {
+                                // "API keys are not supported by this API" also contains the
+                                // word "key" but means the MODEL is wrong, not the key.
+                                // Treat that as "try the next model", never as a dead key.
+                                const le = lastError.toLowerCase();
+                                const keyUnsupportedHere = le.includes('api keys are not supported')
+                                                        || le.includes('expected oauth2');
+                                const keyGenuinelyBad = le.includes('api key not valid')
+                                                     || le.includes('api_key_invalid')
+                                                     || le.includes('api key expired')
+                                                     || le.includes('unauthenticated')
+                                                     || le.includes('leaked');
+
+                                if (keyUnsupportedHere) {
+                                    continue;   // wrong endpoint for an API key — next model
+                                }
+                                if (keyGenuinelyBad || response.status === 401) {
                                     isKeyInvalid = true;
-                                    break; // Skip remaining models for this invalid key
+                                    break;
+                                }
+                                if (response.status === 403) {
+                                    // could be a key restriction rather than a bad key
+                                    isKeyInvalid = true;
+                                    break;
                                 }
 
                                 // Model not available — skip to next model
