@@ -4846,9 +4846,18 @@ OUTPUT FORMAT — USE EXACT TAGS BELOW:
 
                             try {
                                 const headers = { 'Content-Type': 'application/json' };
-                                let url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(currentKey)}`;
-                                if (currentKey.startsWith('AQ.') || currentKey.startsWith('ya29.')) {
+                                // Exactly ONE credential, in the form Google expects.
+                                // Only ya29.* is a real OAuth access token. Everything
+                                // else (AIza..., AQ....) is an API key and must go in
+                                // the query string with NO Authorization header —
+                                // sending both makes Google answer "API keys are not
+                                // supported by this API. Expected OAuth2 access token".
+                                const isOAuthToken = currentKey.startsWith('ya29.');
+                                let url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+                                if (isOAuthToken) {
                                     headers['Authorization'] = `Bearer ${currentKey}`;
+                                } else {
+                                    url += `?key=${encodeURIComponent(currentKey)}`;
                                 }
 
                                 response = await fetch(url, {
